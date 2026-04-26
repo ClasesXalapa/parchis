@@ -1,0 +1,36 @@
+# ═══════════════════════════════════════════════════════
+# PARCHÍS ONLINE — .gitignore
+# ═══════════════════════════════════════════════════════
+
+# ── CRÍTICO: Configuración privada de Firebase ─────────
+# Contiene tu API key. NUNCA subas este archivo a GitHub.
+# Copia firebase-config.example.js → firebase-config.js
+# y rellena tus datos reales ahí.
+firebase-config.js
+
+# ── Sistema operativo ──────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ── Editores de código ─────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Node (si en el futuro usas herramientas de build) ──
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.env
+.env.local
+
+# ── Logs ───────────────────────────────────────────────
+*.log
