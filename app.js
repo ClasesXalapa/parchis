@@ -1200,8 +1200,9 @@ function onPieceTap(playerId, pieceIdx) {
   localState.previewProgress  = matchingMoves[0].resultProgress;
   localState.selectedExitRingIdx = matchingMoves[0].exitRingIdx || null;
 
+  // Solo renderizar preview — el botón fijo de la barra de acción confirma
   renderBoard(room);
-  showConfirmModal(pieceIdx, matchingMoves[0].resultProgress, room);
+  renderTurnControls(room);
 }
 
 /**
@@ -1230,7 +1231,7 @@ function showExitChoiceModal(exitMoves) {
       localState.previewProgress     = move.resultProgress;
       localState.selectedExitRingIdx = move.exitRingIdx;
       renderBoard(room);
-      showConfirmModal(localState.selectedPieceIdx, move.resultProgress, room);
+      renderTurnControls(room);
     });
     options.appendChild(btn);
   });
@@ -1238,28 +1239,7 @@ function showExitChoiceModal(exitMoves) {
   modal.style.display = 'flex';
 }
 
-/**
- * Muestra el modal de confirmación de movimiento.
- * @param {number} pieceIdx
- * @param {number} resultProgress
- * @param {object} room
- */
-function showConfirmModal(pieceIdx, resultProgress, room) {
-  const modal   = document.getElementById('modal-confirm-move');
-  const textEl  = document.getElementById('confirm-move-text');
-  const color   = room.players?.[localState.playerId]?.color;
-  if (!modal) return;
-
-  let destLabel;
-  if (isAtGoal(resultProgress))       destLabel = '🏁 META';
-  else if (isInHomeStretch(resultProgress)) destLabel = `Pasillo (pos ${resultProgress - PATH_LENGTH + 1}/3)`;
-  else                                      destLabel = `Casilla ${resultProgress}`;
-
-  if (textEl) {
-    textEl.textContent = `Ficha ${PIECE_LETTERS[pieceIdx]} → ${destLabel}`;
-  }
-  modal.style.display = 'flex';
-}
+// showConfirmModal eliminado: el botón fijo de la barra de acción reemplaza el modal.
 
 /**
  * El jugador confirma el movimiento (botón Confirmar o segundo toque).
@@ -1272,9 +1252,7 @@ async function confirmMove() {
   const exitRingIdx  = localState.selectedExitRingIdx || null;
   if (pieceIdx === null) return;
 
-  // Cerrar modal de confirmación
-  const modal = document.getElementById('modal-confirm-move');
-  if (modal) modal.style.display = 'none';
+  // No hay modal que cerrar — se usa el botón fijo de la barra de acción
 
   // Limpiar selección
   localState.selectedPieceIdx    = null;
@@ -1291,10 +1269,8 @@ function cancelMove() {
   localState.selectedPieceIdx    = null;
   localState.previewProgress     = null;
   localState.selectedExitRingIdx = null;
-  const modal = document.getElementById('modal-confirm-move');
-  if (modal) modal.style.display = 'none';
   const room = localState.room;
-  if (room) renderBoard(room);
+  if (room) { renderBoard(room); renderTurnControls(room); }
 }
 
 
