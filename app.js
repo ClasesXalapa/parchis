@@ -2631,13 +2631,7 @@ function renderBoard(room) {
     const previewCell = board.querySelector(`[data-cell="${previewCellKey}"]`);
     if (previewCell) {
       previewCell.classList.add('cell-preview');
-      const myColor   = room.players?.[localState.playerId]?.color;
-      const content   = previewCell.querySelector('.cell-content');
-      if (content && myColor) {
-        const ghost = document.createElement('div');
-        ghost.className = `piece-ghost piece-ghost-${myColor}`;
-        content.appendChild(ghost);
-      }
+      // Sin ficha fantasma — el highlight de la celda es suficiente para el preview
     }
   }
 
@@ -3023,14 +3017,11 @@ function renderTurnControls(room) {
     notYourTurn.style.display = (!myTurn) ? 'block' : 'none';
   }
 
-  // Botón confirmar: siempre visible, activo solo cuando hay preview
-  const confirmBtn = document.getElementById('btn-confirm-move');
+  // El botón Confirmar fue eliminado — el segundo toque en la ficha confirma el movimiento
+  // El botón Cancelar (✕) aparece cuando hay preview activo
+  const cancelBtn  = document.getElementById('btn-cancel-move');
   const hasPreview = myTurn && rolled && localState.selectedPieceIdx !== null && localState.previewProgress !== null;
-  if (confirmBtn) {
-    confirmBtn.disabled = !hasPreview;
-    confirmBtn.style.opacity = hasPreview ? '1' : '0.4';
-    confirmBtn.textContent   = hasPreview ? '✅ Confirmar' : 'Selecciona una ficha';
-  }
+  if (cancelBtn) cancelBtn.style.display = hasPreview ? 'inline-flex' : 'none';
 }
 
 /**
@@ -3503,8 +3494,7 @@ function registerUIListeners() {
     }
   });
 
-  // Botón confirmar movimiento
-  document.getElementById('btn-confirm-move')?.addEventListener('click', confirmMove);
+  // Botón cancelar movimiento (el confirm se hace con segundo toque en la ficha)
   document.getElementById('btn-cancel-move')?.addEventListener('click', cancelMove);
 
   // Botón cancelar salida

@@ -188,8 +188,8 @@ if (PATH_CELLS.length !== PATH_LENGTH) {
 ───────────────────────────────────────────────────────────── */
 const EXIT_CELL_INDEX = {
   blue:   13,  // PATH_CELLS[13] = {col:6, row:0}
-  yellow: 26,  // PATH_CELLS[26] = {col:14, row:6}
-  red:    51,  // PATH_CELLS[51] = {col:1, row:8}
+  yellow: 26,  // PATH_CELLS[26] = {col:13, row:6}
+  red:     0,  // PATH_CELLS[0]  = {col:0, row:8}  ← simétrico (fix)
   green:  39,  // PATH_CELLS[39] = {col:8, row:14}
 };
 
@@ -337,7 +337,9 @@ const EXIT_EXTRA_DISTANCES = [6, 8, 10, 12];
  * @returns {number} índice en PATH_CELLS (0-51)
  */
 function getRingIndex(color, progress) {
-  return (EXIT_CELL_INDEX[color] + progress) % PATH_LENGTH;
+  // SENTIDO ANTIHORARIO: se resta el progress del índice de salida.
+  // Para ir en sentido horario cambiar a: (EXIT_CELL_INDEX[color] + progress) % PATH_LENGTH
+  return (EXIT_CELL_INDEX[color] - progress + PATH_LENGTH * 4) % PATH_LENGTH;
 }
 
 /**
@@ -409,7 +411,7 @@ function calculateTargetProgress(color, currentProgress, diceValue, exitCells, c
 
     // Calcular qué progress corresponde a ese ringIndex para este color
     // progress = (ringIndex - EXIT_CELL_INDEX[color] + PATH_LENGTH) % PATH_LENGTH
-    const progress = (exitRingIdx - EXIT_CELL_INDEX[color] + PATH_LENGTH) % PATH_LENGTH;
+    const progress = ringIndexToProgress(color, exitRingIdx);
     return progress;
   }
 
@@ -640,7 +642,9 @@ function getNextExitCellIndex(color, currentExtrasCount) {
  * @returns {number} progress (0-51)
  */
 function ringIndexToProgress(color, ringIdx) {
-  return (ringIdx - EXIT_CELL_INDEX[color] + PATH_LENGTH) % PATH_LENGTH;
+  // Inversa de getRingIndex antihorario:
+  // ringIdx = (EXIT - progress) % PATH → progress = (EXIT - ringIdx) % PATH
+  return (EXIT_CELL_INDEX[color] - ringIdx + PATH_LENGTH * 4) % PATH_LENGTH;
 }
 
 /**

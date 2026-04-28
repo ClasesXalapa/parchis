@@ -508,8 +508,8 @@ input  { font-family: inherit; }
   font-size: .55rem;
 }
 
-/* Ficha en base */
-.piece-badge.in-base { opacity: .4; filter: grayscale(.5); }
+/* Ficha en base — sin transparencia */
+.piece-badge.in-base { /* colores completos siempre */ }
 /* Ficha en meta */
 .piece-badge.at-goal { opacity: 1; box-shadow: 0 0 6px 2px rgba(255,255,255,.4); }
 
@@ -686,7 +686,7 @@ input  { font-family: inherit; }
 .piece-in-home { width: 20px; height: 20px; font-size: .5rem; }
 
 /* Ficha en meta: brillo especial */
-.piece-at-goal { width: 18px; height: 18px; font-size: .48rem; opacity: .9; }
+.piece-at-goal { width: 18px; height: 18px; font-size: .48rem; }
 
 /* Ficha con escudo activo */
 .piece-shielded::after {
@@ -710,11 +710,10 @@ input  { font-family: inherit; }
   z-index: 10;
 }
 
-/* Ficha sin movimiento válido */
+/* Ficha sin movimiento válido — sin transparencia, solo cursor */
 .piece-disabled {
-  opacity: .35;
   cursor: not-allowed;
-  filter: grayscale(.5);
+  /* Sin opacity ni grayscale: todas las fichas siempre con colores completos */
 }
 
 
@@ -775,20 +774,7 @@ input  { font-family: inherit; }
    14. TABLERO — PREVIEW TRANSPARENTE Y HIGHLIGHTS
 ───────────────────────────────────────────────────────────── */
 
-/* Preview: ficha transparente en casilla destino */
-.piece-ghost {
-  width: 26px; height: 26px;
-  border-radius: 50%;
-  border: 2px dashed rgba(255,255,255,.7);
-  opacity: .4;
-  position: relative; z-index: 6;
-  pointer-events: none;
-  animation: ghost-pulse 1s ease-in-out infinite;
-}
-.piece-ghost-blue   { background: var(--blue); }
-.piece-ghost-yellow { background: var(--yellow); }
-.piece-ghost-red    { background: var(--red); }
-.piece-ghost-green  { background: var(--green); }
+/* .piece-ghost eliminado — sin transparencias en fichas */
 
 /* Celda de destino (donde iría la ficha) */
 .cell-preview {
@@ -1016,24 +1002,7 @@ input  { font-family: inherit; }
 
 #screen-game.active .action-bar { display: flex; }
 
-.btn-action-confirm {
-  flex: 1; max-width: 260px;
-  padding: 12px 20px;
-  border-radius: var(--radius-md);
-  font-size: .95rem; font-weight: 700;
-  background: linear-gradient(135deg, var(--success), #388e3c);
-  color: #fff;
-  border: none; cursor: pointer;
-  transition: all var(--transition);
-  box-shadow: 0 3px 12px rgba(76,175,80,.35);
-}
-.btn-action-confirm:disabled {
-  background: rgba(255,255,255,.1);
-  color: var(--text-muted);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-.btn-action-confirm:not(:disabled):hover { transform: translateY(-1px); }
+/* .btn-action-confirm eliminado — el confirm se hace con segundo toque en ficha */
 
 .btn-action-wildcard {
   padding: 12px 16px;
@@ -1057,23 +1026,23 @@ input  { font-family: inherit; }
 }
 
 .btn-action-cancel {
-  padding: 12px 14px;
+  padding: 12px 20px;
   border-radius: var(--radius-md);
-  font-size: .88rem; font-weight: 700;
+  font-size: .9rem; font-weight: 700;
   background: rgba(231,76,60,.15);
   color: var(--red-mid);
   border: 1px solid rgba(231,76,60,.3);
   cursor: pointer;
   transition: all var(--transition);
+  flex: 1; max-width: 200px;
 }
 .btn-action-cancel:hover { background: rgba(231,76,60,.3); }
 
 
-/* Ficha que será capturada (preview de captura) */
+/* Ficha que será capturada (preview de captura) — sin transparencia */
 .piece-capture-preview {
-  text-decoration: line-through;
-  opacity: 0.55;
   position: relative;
+  /* Sin opacity: el tachado indica la captura */
 }
 .piece-capture-preview::after {
   content: '✕';
