@@ -888,10 +888,11 @@ async function activateDiscard() {
   const wildcards = room.playerStats?.[localState.playerId]?.wildcards || {};
   const newWildcards = consumeWildcard(wildcards, WILDCARD_TYPES.DISCARD);
 
-  // Resetear el dado en Firebase (el jugador vuelve a tirar)
+  // Resetear el dado en Firebase y reiniciar el timer
   await roomRef().update({
     'turn/rolled':    false,
     'turn/diceValue': null,
+    'turn/startedAt': firebase.database.ServerValue.TIMESTAMP, // reinicia el timer
     [`playerStats/${localState.playerId}/wildcards`]: newWildcards,
   });
 
@@ -1039,26 +1040,40 @@ function isDestinationFree(room, playerId, color, resultProgress) {
     return true;
   }
 
-  // En camino principal: verificar que no hay ninguna ficha (propia o rival)
-  // REGLA: en ninguna casilla del camino común puede haber 2 fichas simultáneas
-  const destRingIdx = getRingIndex(color, resultProgress);
+  // En camino principal: REGLA ABSOLUTA — nunca 2 fichas en la misma casilla
+  const destRingIdx   = getRingIndex(color, resultProgress);
+  const specialCells  = room.specialCells || {};
+  const isDestSafe = isSafeCell(specialCells, destRingIdx);
+  // Nota: la exit cell protege solo al color dueño de esa casilla
+  // (verificado individualmente cuando se encuentra la ficha rival)
+
+  let foundRival = false;
 
   for (const [pid, pcs] of Object.entries(room.pieces || {})) {
     const pColor = room.players?.[pid]?.color;
     if (!pColor) continue;
+
     for (let i = 0; i < PIECES_PER_PLAYER; i++) {
       const prog = pcs['p' + i];
       if (!isOnMainPath(prog)) continue;
-      if (getRingIndex(pColor, prog) === destRingIdx) {
-        // Si es ficha propia: movimiento inválido siempre
-        if (pid === playerId) return false;
-        // Si es ficha rival: válido SOLO si no es casilla segura
-        // (la captura se maneja en checkCaptureAt; aquí solo bloqueamos
-        //  si hay 2+ fichas rivales distintas en la misma casilla, imposible por diseño)
-      }
+      if (getRingIndex(pColor, prog) !== destRingIdx) continue;
+
+      // Ficha propia en el destino → siempre inválido
+      if (pid === playerId) return false;
+
+      // Ficha rival en el destino
+      // Si la casilla es SAFE dinámica: no se puede ir ahí
+      if (isDestSafe) return false;
+      // Si la casilla es la exit cell PROPIA del rival: no se puede comer
+      // (la exit cell solo protege al color dueño de esa casilla)
+      if (destRingIdx === EXIT_CELL_INDEX[pColor]) return false;
+
+      // Casilla no segura con 1 rival → válido (habrá captura)
+      foundRival = true;
     }
   }
-  return true;
+
+  return true; // libre o con 1 rival capturable
 }
 
 /**
@@ -1086,8 +1101,12 @@ function checkCaptureAt(room, ringIdx, attackerColor) {
       if (!isOnMainPath(prog)) continue;
       if (getRingIndex(color, prog) !== ringIdx) continue;
 
+      // La casilla de salida del propio color es SIEMPRE segura
+      // (una ficha en su casilla de salida nunca puede ser comida)
+      if (ringIdx === EXIT_CELL_INDEX[color]) return null;
+
       // Verificar Escudo Acme en la ficha
-      const pieceIdx      = parseInt(key[1]);
+      const pieceIdx       = parseInt(key[1]);
       const shieldedPieces = room.playerStats?.[pid]?.shieldedPieces || [];
       const shielded       = shieldedPieces.includes(pieceIdx);
 
@@ -1341,6 +1360,7 @@ async function movePiece(pieceIdx, chosenExitRingIdx = null) {
     if (isOnMainPath(resultProgress)) {
       const destRingIdx   = getRingIndex(color, resultProgress);
       const specialCell   = getSpecialCellAt(freshRoom.specialCells || {}, destRingIdx);
+      console.log(`[special] ringIdx=${destRingIdx}, progress=${resultProgress}, cell=`, specialCell?.type || 'none');
       if (specialCell) {
         freshRoom = await activateSpecialCellOnPiece(specialCell, destRingIdx, pieceIdx, resultProgress, freshRoom);
         // La ficha puede haber cambiado de posición por el efecto
@@ -1398,11 +1418,11 @@ async function handlePostMove(room, pieceIdx) {
       'turn/rolled':     false,
       'turn/diceValue':  null,
       'turn/bonusTurns': remainingBonus,
-      'turn/startedAt':  firebase.database.ServerValue.TIMESTAMP,
+      'turn/startedAt':  firebase.database.ServerValue.TIMESTAMP, // reinicia timer
     });
 
     const reason = isSix ? '¡Seis!' : 'turno extra';
-    await addGameEvent(`🎁 ${localState.playerName} tiene turno extra (${reason}).`, 'event-six');
+    await addGameEvent(`🎁 ${localState.playerName} tiene turno extra (${reason}). ¡Tira de nuevo!`, 'event-six');
   } else {
     await nextTurn(localState.playerId);
   }
@@ -1428,7 +1448,11 @@ async function handlePieceReachGoal(pieceIdx, room) {
     'globalStats/totalPiecesInGoal':          totalInGoal,
   });
 
-  await addGameEvent(`🏁 ¡${playerName} (Ficha ${PIECE_LETTERS[pieceIdx]}) llegó a la META!`, 'event-goal');
+  // Llegar a la meta SIEMPRE da turno extra
+  const currentBonusMeta = room.turn?.bonusTurns || 0;
+  await roomRef().update({ 'turn/bonusTurns': currentBonusMeta + 1 });
+
+  await addGameEvent(`🏁 ¡${playerName} (Ficha ${PIECE_LETTERS[pieceIdx]}) llegó a la META! +1 turno extra.`, 'event-goal');
 
   // Verificar si ganó (4 fichas en meta)
   const freshRoom = (await roomRef().once('value')).val();
@@ -1691,12 +1715,26 @@ async function activateSpecialCellOnPiece(cell, ringIdx, pieceIdx, currentProgre
       break;
 
     case 'bonus_move': {
-      const bonus        = result.effectValue; // +1 a +6
-      const newProgress  = calculateTargetProgress(color, currentProgress, bonus, room.playerStats?.[pid]?.exitCells, null);
+      const bonus = result.effectValue; // +1 a +6
+      let newProgress = calculateTargetProgress(color, currentProgress, bonus, room.playerStats?.[pid]?.exitCells, null);
+
+      // Verificar que el destino esté libre. Si está ocupado, buscar la siguiente casilla libre.
+      // (El bonus no puede mover la ficha a una casilla ocupada)
+      if (newProgress !== null && isOnMainPath(newProgress)) {
+        let attempts = 0;
+        while (attempts < PATH_LENGTH) {
+          if (isDestinationFree(room, pid, color, newProgress)) break;
+          // Casilla ocupada: avanzar 1 más (antihorario)
+          newProgress = (newProgress + 1) % PATH_LENGTH;
+          attempts++;
+        }
+        if (attempts >= PATH_LENGTH) newProgress = null; // no hay casilla libre
+      }
+
       if (newProgress !== null) {
         updates[`pieces/${pid}/${pieceKey}`] = newProgress;
         await roomRef().update(updates);
-        await addGameEvent(`⭐ Bonus: +${bonus} casillas extra.`, 'event-special');
+        await addGameEvent(`⭐ Bonus: +${bonus} casillas extra (pos ${newProgress}).`, 'event-special');
 
         // Verificar cadena: ¿la nueva casilla también es especial?
         const freshRoom2 = (await roomRef().once('value')).val();
@@ -1708,9 +1746,15 @@ async function activateSpecialCellOnPiece(cell, ringIdx, pieceIdx, currentProgre
             return await activateSpecialCellOnPiece(chainedCell, newRingIdx, pieceIdx, newProgress, freshRoom2);
           }
         }
+        // Si el bonus llevó a la meta, registrarlo
+        if (isAtGoal(newProgress)) {
+          await handlePieceReachGoal(pieceIdx, freshRoom2);
+        }
         return freshRoom2;
       }
-      break;
+      // Sin casilla libre: solo eliminar la celda especial
+      await roomRef().update(updates);
+      return (await roomRef().once('value')).val();
     }
 
     case 'send_home': {
@@ -1761,7 +1805,19 @@ async function activateSpecialCellOnPiece(cell, ringIdx, pieceIdx, currentProgre
         ? Math.abs(shieldResult.effectValue)
         : retreatVal;
 
-      const newProgress = calculateRetreatProgress(currentProgress, effectiveRetreat, false);
+      let newProgress = calculateRetreatProgress(currentProgress, effectiveRetreat, false);
+
+      // Verificar que el destino esté libre. Si está ocupado, buscar la casilla libre más cercana.
+      if (isOnMainPath(newProgress)) {
+        let attempts = 0;
+        while (attempts < PATH_LENGTH) {
+          if (isDestinationFree(room, pid, color, newProgress)) break;
+          // Casilla ocupada: retroceder 1 más
+          newProgress = Math.max(0, newProgress - 1);
+          attempts++;
+        }
+      }
+
       updates[`pieces/${pid}/${pieceKey}`] = newProgress;
 
       if (shieldResult) {
