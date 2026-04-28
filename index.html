@@ -334,6 +334,11 @@
 
     </div>
 
+    <!-- ── Paneles de jugadores (móvil: 2x2 grid debajo del tablero) ── -->
+    <div class="game-players-info" id="game-players-info-mobile">
+      <!-- Se llena dinámicamente con renderAllPanels -->
+    </div>
+
     <!-- ── Log de eventos ── -->
     <div id="event-log-panel" class="event-log-panel">
       <div class="event-log-header">
@@ -341,6 +346,17 @@
         <button id="btn-toggle-log" class="btn btn-ghost btn-sm">▼</button>
       </div>
       <ul id="game-event-log" class="game-event-log"></ul>
+    </div>
+
+    <!-- Barra fija de acción: confirmar + comodín (siempre visible en juego) -->
+    <div class="action-bar">
+      <button id="btn-wildcard-mobile" class="btn-action-wildcard" disabled title="Usar comodín">
+        🃏 Comodín
+      </button>
+      <button id="btn-confirm-move" class="btn-action-confirm" disabled>
+        Selecciona una ficha
+      </button>
+      <button id="btn-cancel-move" class="btn-action-cancel" style="display:none;">✕</button>
     </div>
 
     <!-- Mensaje temporal -->

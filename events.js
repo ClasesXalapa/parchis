@@ -133,17 +133,19 @@ const GAME_EVENTS = {
     effectDesc:  'Recibe el comodín Ataque Dirigido.',
   },
 
-  EVERY_10_TURNS: {
-    id:          'EVERY_10_TURNS',
-    trigger:     'turn_count_interval',
-    triggerValue: 10,  // Cada 10 turnos
+  WILDCARD_CYCLE: {
+    id:          'WILDCARD_CYCLE',
+    trigger:     'wildcard_cycle_turns',
+    // Ciclo: turno 30, 45, 68, luego 98(68+30), 113(68+45), 136(68+68), etc.
+    // Fórmula: totalTurns % 68 === 30 || 45 || 0 (y totalTurns > 0)
+    // Después de 68 reinicia: 30→45→68→30→45→68...
     effect:      'give_random_wildcard',
     target:      'all',
     repeatable:  true,
     modes:       ['wild'],
     icon:        '🎁',
-    title:       '¡Turno 10!',
-    description: 'Cada 10 turnos completados',
+    title:       '¡Comodines para todos!',
+    description: 'Ciclo de turnos (30→45→68→...)',
     effectDesc:  'Todos los jugadores reciben un comodín aleatorio.',
   },
 
@@ -330,12 +332,13 @@ function checkAndFireEvents(room, context, contextData = {}) {
         }
         break;
 
-      case 'turn_count_interval':
+      case 'wildcard_cycle_turns':
         if (context === 'turn_ended') {
           const turnCount = globalStats.totalTurns || 0;
-          const prevCount = turnCount - 1;
-          shouldFire = (Math.floor(turnCount / event.triggerValue) >
-                        Math.floor(prevCount  / event.triggerValue));
+          // Ciclo 30→45→68→(68+30)→(68+45)→(68+68)→...
+          // Se dispara cuando turnCount % 68 === 30, 45 o 0 (y > 0)
+          const mod = turnCount % 68;
+          shouldFire = turnCount > 0 && (mod === 30 || mod === 45 || mod === 0);
         }
         break;
 

@@ -359,6 +359,7 @@ async function reconnectToRoom(roomCode, playerName, room) {
 
   if (room.status === 'playing') {
     showScreen('screen-game');
+    initBoard(); // CRÍTICO: siempre reiniciar el tablero al reconectar
     if (room) { renderBoard(room); renderAllPanels(room); }
     startTurnLogic(room);
   } else if (room.status === 'waiting' || room.status === 'config') {
@@ -542,7 +543,8 @@ function onRoomUpdate(room) {
     updateWaitingRoomUI(room);
     if (room.status === 'playing') {
       showScreen('screen-game');
-      initBoard();
+      const bd = document.getElementById('board');
+      if (!bd || bd.children.length === 0) initBoard();
       renderBoard(room);
       renderAllPanels(room);
       startTurnLogic(room);
@@ -588,7 +590,8 @@ function onRoomUpdate(room) {
   // ── Lobby (reconexión tardía) ──────────────────────────────────
   if (room.status === 'playing') {
     showScreen('screen-game');
-    initBoard();
+    const boardEl = document.getElementById('board');
+    if (!boardEl || boardEl.children.length === 0) initBoard();
     renderBoard(room);
     renderAllPanels(room);
     startTurnLogic(room);
@@ -807,7 +810,8 @@ async function _applyDiceRoll(value, room) {
     const validMoves = getValidMovesForDice(freshRoom, localState.playerId, value);
 
     if (validMoves.length === 0) {
-      await addGameEvent(`⏭️ ${playerName} no tiene movimientos válidos.`, 'event-turn');
+      showGameMsg('Sin movimientos válidos. El turno pasa automáticamente.');
+      await addGameEvent(`⏭️ ${playerName} no tiene movimientos válidos. Turno saltado.`, 'event-turn');
       await nextTurn(localState.playerId);
     }
 
@@ -1035,15 +1039,23 @@ function isDestinationFree(room, playerId, color, resultProgress) {
     return true;
   }
 
-  // En camino principal: verificar que no hay ficha propia
+  // En camino principal: verificar que no hay ninguna ficha (propia o rival)
+  // REGLA: en ninguna casilla del camino común puede haber 2 fichas simultáneas
   const destRingIdx = getRingIndex(color, resultProgress);
-  const myPieces    = room.pieces?.[playerId];
-  if (!myPieces) return true;
 
-  for (let i = 0; i < PIECES_PER_PLAYER; i++) {
-    const prog = myPieces['p' + i];
-    if (isOnMainPath(prog) && getRingIndex(color, prog) === destRingIdx) {
-      return false; // Hay ficha propia en ese ringIdx
+  for (const [pid, pcs] of Object.entries(room.pieces || {})) {
+    const pColor = room.players?.[pid]?.color;
+    if (!pColor) continue;
+    for (let i = 0; i < PIECES_PER_PLAYER; i++) {
+      const prog = pcs['p' + i];
+      if (!isOnMainPath(prog)) continue;
+      if (getRingIndex(pColor, prog) === destRingIdx) {
+        // Si es ficha propia: movimiento inválido siempre
+        if (pid === playerId) return false;
+        // Si es ficha rival: válido SOLO si no es casilla segura
+        // (la captura se maneja en checkCaptureAt; aquí solo bloqueamos
+        //  si hay 2+ fichas rivales distintas en la misma casilla, imposible por diseño)
+      }
     }
   }
   return true;
@@ -2599,6 +2611,9 @@ function renderBoard(room) {
     }
   }
 
+  // Renderizar casillas de salida extra por jugador
+  _renderExtraExitCells(board, room);
+
   // Renderizar casillas especiales
   _renderSpecialCells(board, room.specialCells || {});
 
@@ -2640,15 +2655,77 @@ function renderBoard(room) {
     const previewCell = board.querySelector(`[data-cell="${previewCellKey}"]`);
     if (previewCell) {
       previewCell.classList.add('cell-preview');
-      // Agregar ficha ghost (transparente) en el destino
-      const color   = room.players?.[localState.playerId]?.color;
-      const content = previewCell.querySelector('.cell-content');
-      if (content && color) {
+      const myColor   = room.players?.[localState.playerId]?.color;
+      const content   = previewCell.querySelector('.cell-content');
+      if (content && myColor) {
         const ghost = document.createElement('div');
-        ghost.className = `piece-ghost piece-ghost-${color}`;
+        ghost.className = `piece-ghost piece-ghost-${myColor}`;
         content.appendChild(ghost);
       }
     }
+  }
+
+  // Previsualización de captura: tachar ficha rival que será comida
+  if (isMyTurn(room) && room.turn?.rolled && localState.selectedPieceIdx !== null && localState.previewProgress !== null) {
+    const myColor  = room.players?.[localState.playerId]?.color;
+    const diceVal  = room.turn?.diceValue;
+    if (myColor && diceVal) {
+      const destProgress = localState.previewProgress;
+      if (isOnMainPath(destProgress)) {
+        const destRing    = getRingIndex(myColor, destProgress);
+        const captureInfo = checkCaptureAt(room, destRing, myColor);
+        if (captureInfo) {
+          // Tachar la ficha que será comida en su posición actual
+          const victimColor = captureInfo.victimColor;
+          const victimProg  = captureInfo.victimProgress;
+          const victimPos   = getVisualPosition(victimColor, victimProg, parseInt(captureInfo.victimPieceKey[1]));
+          if (victimPos) {
+            const victimCell = board.querySelector(`[data-cell="${cellKey(victimPos.col, victimPos.row)}"]`);
+            if (victimCell) {
+              const pieces = victimCell.querySelectorAll('.piece');
+              pieces.forEach(p => {
+                if (p.dataset.playerId === captureInfo.victimId) p.classList.add('piece-capture-preview');
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Pinta las casillas de salida adicionales desbloqueadas por eventos.
+ * Muestra el número (2, 3...) del color del jugador en el centro de la casilla.
+ * @param {HTMLElement} board
+ * @param {object} room
+ */
+function _renderExtraExitCells(board, room) {
+  if (!room.players || !room.playerStats) return;
+
+  for (const [pid, player] of Object.entries(room.players)) {
+    const color   = player.color;
+    const extras  = room.playerStats?.[pid]?.exitCells?.extras || [];
+    if (extras.length === 0) continue;
+
+    extras.forEach((ringIdx, idx) => {
+      const pos = PATH_CELLS[ringIdx];
+      if (!pos) return;
+
+      const domCell = board.querySelector(`[data-cell="${cellKey(pos.col, pos.row)}"]`);
+      if (!domCell) return;
+
+      // Aplicar clase de salida extra
+      domCell.classList.add('cell-path', `cell-exit-extra`, `cell-exit-extra-${color}`);
+
+      // Agregar número (2, 3, 4...) en el centro
+      if (!domCell.querySelector('.exit-cell-number')) {
+        const num = document.createElement('span');
+        num.className   = `exit-cell-number ${color}`;
+        num.textContent = String(idx + 2); // 2, 3, 4...
+        domCell.appendChild(num);
+      }
+    });
   }
 }
 
@@ -2792,10 +2869,59 @@ function _buildPieceElement(color, playerId, pieceIdx, progress, room, validPiec
 function renderAllPanels(room) {
   if (!room) return;
   renderPlayerPanels(room);
+  renderMobilePanels(room);
   renderTurnControls(room);
   renderDiceDisplay(room);
   renderWildcardButtons(room);
   renderBonusTurnsInfo(room);
+}
+
+/**
+ * Clona los paneles de jugadores al contenedor móvil (2x2 grid).
+ * @param {object} room
+ */
+function renderMobilePanels(room) {
+  const mobileContainer = document.getElementById('game-players-info-mobile');
+  if (!mobileContainer) return;
+  mobileContainer.innerHTML = '';
+
+  const ordered = getPlayersOrdered(room, false);
+  const currentTurnId = room.turn?.playerId;
+
+  ordered.forEach(pid => {
+    const player = room.players?.[pid];
+    if (!player) return;
+    const color  = player.color;
+    const pieces = room.pieces?.[pid] || {};
+    const stats  = room.playerStats?.[pid] || {};
+    const shielded = stats.shieldedPieces || [];
+    const isActive = pid === currentTurnId;
+
+    const panel = document.createElement('div');
+    panel.className = `player-panel player-panel-${color}${isActive ? ' is-active-turn' : ''}`;
+
+    const piecesHtml = Array.from({length: PIECES_PER_PLAYER}, (_, i) => {
+      const prog    = pieces['p' + i];
+      const letter  = PIECE_LETTERS[i];
+      const inBase  = isAtHome(prog);
+      const atGoal  = isAtGoal(prog);
+      const hasShield = shielded.includes(i);
+      const cls = [inBase ? 'in-base' : atGoal ? 'at-goal' : '', hasShield ? 'has-shield' : ''].join(' ');
+      return `<span class="piece-badge ${color} ${cls}">${letter}</span>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div class="panel-name-row">
+        <span class="panel-color-dot ${color}"></span>
+        <span class="panel-player-name">${escapeHtml(player.name)}${pid === localState.playerId ? ' (Tú)' : ''}</span>
+        ${isActive ? '<span class="panel-turn-arrow">▶</span>' : ''}
+      </div>
+      <div class="panel-pieces-row">${piecesHtml}</div>
+      <div>${renderExitNumbersHTML(room, pid)}</div>
+      <div>${_renderWildcardChipsHTML(room, pid)}</div>
+    `;
+    mobileContainer.appendChild(panel);
+  });
 }
 
 /**
@@ -2920,6 +3046,15 @@ function renderTurnControls(room) {
   if (notYourTurn) {
     notYourTurn.style.display = (!myTurn) ? 'block' : 'none';
   }
+
+  // Botón confirmar: siempre visible, activo solo cuando hay preview
+  const confirmBtn = document.getElementById('btn-confirm-move');
+  const hasPreview = myTurn && rolled && localState.selectedPieceIdx !== null && localState.previewProgress !== null;
+  if (confirmBtn) {
+    confirmBtn.disabled = !hasPreview;
+    confirmBtn.style.opacity = hasPreview ? '1' : '0.4';
+    confirmBtn.textContent   = hasPreview ? '✅ Confirmar' : 'Selecciona una ficha';
+  }
 }
 
 /**
@@ -2954,13 +3089,26 @@ function renderDiceDisplay(room) {
 /**
  * Renderiza los botones de comodines disponibles para el turno actual.
  * Solo muestra los comodines que el jugador puede usar en este momento.
+ * También actualiza el botón fijo de comodín (móvil).
  * @param {object} room
  */
 function renderWildcardButtons(room) {
-  const container = document.getElementById('wildcard-buttons');
-  if (!container) return;
-  container.innerHTML = '';
+  const container    = document.getElementById('wildcard-buttons');
+  const mobileWcBtn  = document.getElementById('btn-wildcard-mobile');
 
+  if (container) container.innerHTML = '';
+
+  // Botón móvil: siempre visible, gris si no hay comodines o no es tu turno
+  if (mobileWcBtn) {
+    const hasAny = isMyTurn(room) &&
+      room.config?.gameMode === GAME_MODES.WILD &&
+      getTotalWildcards(room.playerStats?.[localState.playerId]?.wildcards) > 0;
+    mobileWcBtn.disabled       = !hasAny;
+    mobileWcBtn.style.opacity  = hasAny ? '1' : '0.4';
+    mobileWcBtn.style.cursor   = hasAny ? 'pointer' : 'not-allowed';
+  }
+
+  if (!container) return;
   if (!isMyTurn(room) || room.config?.gameMode !== GAME_MODES.WILD) return;
 
   const rolled     = room.turn?.rolled || false;
@@ -3217,6 +3365,65 @@ async function copyToClipboard(text, btn) {
    SECCIÓN 26 — MANEJADORES DE EVENTOS (CLICS DE UI)
 ═══════════════════════════════════════════════════════════════════ */
 
+/**
+ * Muestra el modal de selección de comodín (versión móvil y desktop).
+ * Lista los comodines disponibles y permite elegir o cancelar.
+ * @param {object} room
+ */
+function showWildcardPickerModal(room) {
+  if (!isMyTurn(room) || room.config?.gameMode !== GAME_MODES.WILD) return;
+
+  const rolled    = room.turn?.rolled || false;
+  const wildcards = room.playerStats?.[localState.playerId]?.wildcards || {};
+  const available = [];
+
+  if (!rolled && hasWildcard(wildcards, WILDCARD_TYPES.DIR_ATTACK) && canUseDirAttack(room, localState.playerId)) {
+    available.push({ type: WILDCARD_TYPES.DIR_ATTACK, config: WILDCARD_CONFIG[WILDCARD_TYPES.DIR_ATTACK], count: wildcards[WILDCARD_TYPES.DIR_ATTACK] });
+  }
+  if (rolled && hasWildcard(wildcards, WILDCARD_TYPES.DISCARD) && canUseDiscard(room)) {
+    available.push({ type: WILDCARD_TYPES.DISCARD, config: WILDCARD_CONFIG[WILDCARD_TYPES.DISCARD], count: wildcards[WILDCARD_TYPES.DISCARD] });
+  }
+  if (hasWildcard(wildcards, WILDCARD_TYPES.ACME_SHIELD)) {
+    const targets = getShieldableTargets(room, localState.playerId);
+    if (targets.length > 0) {
+      available.push({ type: WILDCARD_TYPES.ACME_SHIELD, config: WILDCARD_CONFIG[WILDCARD_TYPES.ACME_SHIELD], count: wildcards[WILDCARD_TYPES.ACME_SHIELD] });
+    }
+  }
+
+  if (available.length === 0) { showGameMsg('No tienes comodines disponibles ahora.'); return; }
+
+  // Reutilizar el modal de ataque con contenido dinámico
+  const modal     = document.getElementById('modal-attack-target');
+  const container = document.getElementById('attack-targets');
+  const titleEl   = modal?.querySelector('h2');
+  const subtitleEl = modal?.querySelector('p.modal-subtitle');
+  if (!modal || !container) return;
+
+  if (titleEl)    titleEl.textContent    = '🃏 Usar comodín';
+  if (subtitleEl) subtitleEl.textContent = 'Elige qué comodín activar o cancela';
+
+  container.innerHTML = '';
+  available.forEach(({ type, config, count }) => {
+    const btn = document.createElement('button');
+    btn.className   = 'attack-target-btn';
+    btn.innerHTML   = `${config.icon} <strong>${config.name}</strong> ×${count}<br><small style="color:var(--text-muted)">${config.description.slice(0,60)}...</small>`;
+    btn.addEventListener('click', () => {
+      modal.style.display = 'none';
+      // Restaurar título
+      if (titleEl)    titleEl.textContent    = '🎯 Ataque Dirigido';
+      if (subtitleEl) subtitleEl.textContent = 'Elige una ficha rival para retroceder 10 casillas';
+      switch(type) {
+        case WILDCARD_TYPES.DIR_ATTACK:  activateDirAttack();  break;
+        case WILDCARD_TYPES.DISCARD:     activateDiscard();    break;
+        case WILDCARD_TYPES.ACME_SHIELD: activateAcmeShield(); break;
+      }
+    });
+    container.appendChild(btn);
+  });
+
+  modal.style.display = 'flex';
+}
+
 function registerUIListeners() {
 
   // ── Lobby ──────────────────────────────────────────────────────
@@ -3339,6 +3546,12 @@ function registerUIListeners() {
   document.getElementById('btn-cancel-shield')?.addEventListener('click', () => {
     document.getElementById('modal-shield-assign').style.display = 'none';
     localState.shieldTargetMode = false;
+  });
+
+  // Botón comodín móvil
+  document.getElementById('btn-wildcard-mobile')?.addEventListener('click', () => {
+    const room = localState.room;
+    if (room) showWildcardPickerModal(room);
   });
 
   // Toggle log de eventos

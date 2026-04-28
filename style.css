@@ -53,17 +53,17 @@
   --green-piece:   #2ecc71;
 
   /* Casillas especiales */
-  --special-pos-bg:    #d5f5e3;
+  --special-pos-bg:    #ffffff;   /* positivas: fondo blanco puro */
   --special-pos-border:#27ae60;
   --special-pos-text:  #1e8449;
-  --special-neg-bg:    #fdecea;
-  --special-neg-border:#e74c3c;
-  --special-neg-text:  #c0392b;
+  --special-neg-bg:    #eeeeee;   /* negativas: gris neutro */
+  --special-neg-border:#9e9e9e;
+  --special-neg-text:  #616161;
 
   /* Tablero */
   --board-size:    540px;
   --cell-size:     36px;
-  --board-bg:      #f0ebe0;
+  --board-bg:      #f5f2ee; /* ligeramente cálido solo para el borde */
   --path-bg:       #ffffff;
   --path-border:   #d0c8b8;
   --center-bg:     #e8e0d0;
@@ -130,16 +130,13 @@ input  { font-family: inherit; }
   justify-content: flex-start;
 }
 #screen-game.active {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  grid-template-columns: 1fr;
-  height: 100vh;
-  max-height: 100vh;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  overflow-y: auto;
   background: linear-gradient(135deg, #0d1b0f 0%, #1a1a2e 100%);
-  justify-content: stretch;
-  align-items: stretch;
-  padding: 0;
+  padding-bottom: 80px; /* espacio para la barra de acción fija */
 }
 
 
@@ -385,28 +382,24 @@ input  { font-family: inherit; }
    8. LAYOUT DE JUEGO
 ───────────────────────────────────────────────────────────── */
 .game-top-panels {
-  grid-row: 1;
   display: flex;
   justify-content: center;
   gap: 8px;
   padding: 6px 8px 4px;
   background: rgba(0,0,0,.25);
   border-bottom: 1px solid rgba(255,255,255,.07);
+  width: 100%;
 }
 
 .game-middle-row {
-  grid-row: 2;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 6px 8px;
-  overflow: hidden;
-  flex: 1;
 }
 
 .game-controls {
-  grid-row: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -414,16 +407,17 @@ input  { font-family: inherit; }
   padding: 6px 14px;
   background: rgba(0,0,0,.3);
   border-top: 1px solid rgba(255,255,255,.07);
+  width: 100%;
   flex-wrap: wrap;
 }
 
 .event-log-panel {
-  grid-row: 4;
   background: rgba(0,0,0,.4);
   border-top: 1px solid rgba(255,255,255,.06);
   max-height: 60px;
   overflow: hidden;
   transition: max-height .3s ease;
+  width: 100%;
 }
 .event-log-panel.expanded { max-height: 140px; }
 
@@ -730,8 +724,8 @@ input  { font-family: inherit; }
 
 /* Casilla especial positiva */
 .cell-special-pos {
-  background: var(--special-pos-bg) !important;
-  border: 2px solid var(--special-pos-border) !important;
+  background: #ffffff !important;
+  border: 1.5px solid var(--special-pos-border) !important;
 }
 .cell-special-pos::before {
   content: attr(data-effect);
@@ -750,8 +744,8 @@ input  { font-family: inherit; }
 
 /* Casilla especial negativa */
 .cell-special-neg {
-  background: var(--special-neg-bg) !important;
-  border: 2px solid var(--special-neg-border) !important;
+  background: #eeeeee !important;
+  border: 1.5px solid #9e9e9e !important;
 }
 .cell-special-neg::before {
   content: attr(data-effect);
@@ -1002,6 +996,124 @@ input  { font-family: inherit; }
 .share-url-row { display: flex; align-items: center; gap: 8px; }
 
 
+
+/* ─────────────────────────────────────────────────────────────
+   BARRA DE ACCIÓN FIJA (siempre visible en juego)
+───────────────────────────────────────────────────────────── */
+.action-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: none; /* se muestra solo en #screen-game.active */
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(15,20,40,.97);
+  border-top: 1px solid rgba(255,255,255,.1);
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+
+#screen-game.active .action-bar { display: flex; }
+
+.btn-action-confirm {
+  flex: 1; max-width: 260px;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  font-size: .95rem; font-weight: 700;
+  background: linear-gradient(135deg, var(--success), #388e3c);
+  color: #fff;
+  border: none; cursor: pointer;
+  transition: all var(--transition);
+  box-shadow: 0 3px 12px rgba(76,175,80,.35);
+}
+.btn-action-confirm:disabled {
+  background: rgba(255,255,255,.1);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.btn-action-confirm:not(:disabled):hover { transform: translateY(-1px); }
+
+.btn-action-wildcard {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: .88rem; font-weight: 700;
+  background: rgba(155,89,182,.2);
+  color: #c39bd3;
+  border: 1px solid rgba(155,89,182,.4);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-action-wildcard:disabled {
+  background: rgba(255,255,255,.05);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  border-color: rgba(255,255,255,.1);
+}
+.btn-action-wildcard:not(:disabled):hover {
+  background: rgba(155,89,182,.35);
+  border-color: rgba(155,89,182,.7);
+}
+
+.btn-action-cancel {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: .88rem; font-weight: 700;
+  background: rgba(231,76,60,.15);
+  color: var(--red-mid);
+  border: 1px solid rgba(231,76,60,.3);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-action-cancel:hover { background: rgba(231,76,60,.3); }
+
+
+/* Ficha que será capturada (preview de captura) */
+.piece-capture-preview {
+  text-decoration: line-through;
+  opacity: 0.55;
+  position: relative;
+}
+.piece-capture-preview::after {
+  content: '✕';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  font-size: .7rem;
+  color: #fff;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+
+/* Número de salida extra dentro de la casilla */
+.exit-cell-number {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  font-size: .65rem;
+  font-weight: 900;
+  z-index: 3;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+.exit-cell-number.blue   { color: var(--blue-dark); }
+.exit-cell-number.yellow { color: var(--yellow-dark); }
+.exit-cell-number.red    { color: var(--red-dark); }
+.exit-cell-number.green  { color: var(--green-dark); }
+
+
+/* Sección de información de jugadores debajo del tablero */
+.game-players-info {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(0,0,0,.2);
+}
+
 /* ─────────────────────────────────────────────────────────────
    18. ANIMACIONES
 ───────────────────────────────────────────────────────────── */
@@ -1048,35 +1160,41 @@ input  { font-family: inherit; }
 ───────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   :root {
-    --board-size: min(85vw, 420px);
-    --cell-size:  calc(min(85vw, 420px) / 15);
+    --board-size: min(85vw, 480px);
+    --cell-size:  calc(min(85vw, 480px) / 15);
   }
 
-  .player-panel { min-width: 120px; max-width: 160px; padding: 5px 8px; }
-  .player-panel-side { min-width: 90px; max-width: 120px; }
-  .piece-badge { width: 20px; height: 20px; font-size: .55rem; }
+  /* En móvil: ocultar paneles de los lados, mostrar info abajo */
+  .game-top-panels  { display: none; }
+  .player-panel-side { display: none; }
+  .game-middle-row  { padding: 4px; }
+
+  /* Paneles en grid 2x2 debajo del tablero */
+  .game-players-info { display: grid; }
+
+  .player-panel { min-width: unset; max-width: unset; width: 100%; padding: 6px 10px; }
+  .piece-badge  { width: 20px; height: 20px; font-size: .55rem; }
 
   .game-controls { padding: 5px 8px; gap: 8px; }
-  .dice-display { width: 44px; height: 44px; }
-  .dice-value { font-size: 1.5rem; }
-
-  .controls-wildcards { display: none; } /* En móvil se muestran solo en el panel */
+  .dice-display  { width: 44px; height: 44px; }
+  .dice-value    { font-size: 1.5rem; }
+  .controls-wildcards { display: none; }
 }
 
 @media (max-width: 600px) {
   :root {
-    --board-size: 95vw;
-    --cell-size:  calc(95vw / 15);
+    --board-size: 98vw;
+    --cell-size:  calc(98vw / 15);
   }
-
-  .game-top-panels { flex-wrap: wrap; gap: 4px; }
-  .game-middle-row { gap: 4px; }
-  .player-panel-side { display: none; } /* En pantallas muy pequeñas se ocultan laterales */
 
   .lobby-wrapper, .config-wrapper, .waiting-wrapper { padding: 20px 12px 32px; }
   .lobby-header h1 { font-size: 1.8rem; }
-  .room-code-big { font-size: 1.7rem; letter-spacing: 5px; }
+  .room-code-big   { font-size: 1.7rem; letter-spacing: 5px; }
 
-  .piece { width: 20px; height: 20px; font-size: .5rem; }
-  .piece-in-home { width: 15px; height: 15px; }
+  .piece         { width: 18px; height: 18px; font-size: .48rem; }
+  .piece-in-home { width: 14px; height: 14px; }
+
+  .action-bar { padding: 8px 10px; gap: 6px; }
+  .btn-action-confirm { font-size: .85rem; padding: 10px 14px; }
+  .btn-action-wildcard { font-size: .8rem;  padding: 10px 12px; }
 }
